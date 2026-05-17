@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Thaletova kružnice</title>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --blue:#3b82f6;--dark:#1e293b;--red:#ef4444;--amber:#f59e0b;
+      --slate:#64748b;--bg:#f1f5f9;--card:#fff;--border:#e2e8f0;
+      --text:#0f172a;--muted:#64748b
+    }
+    body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+    header{display:flex;align-items:center;justify-content:space-between;padding:.6rem 1.2rem;background:var(--dark);color:#fff}
+    header h1{font-size:1.1rem;font-weight:600;letter-spacing:.02em}
+    .hbtns{display:flex;gap:.5rem}
+    .btn{padding:.3rem .8rem;border:1px solid rgba(255,255,255,.3);border-radius:6px;background:transparent;color:#fff;cursor:pointer;font-size:.82rem;transition:background .15s}
+    .btn:hover{background:rgba(255,255,255,.15)}
+    .btn:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+    main{display:flex;flex-wrap:wrap;gap:1rem;padding:1rem;max-width:1060px;margin:0 auto;align-items:flex-start}
+    #board{display:block;width:100%;max-width:500px;height:auto;border-radius:10px;
+           background:#fff;filter:drop-shadow(0 2px 10px rgba(0,0,0,.12))}
+    #side-panel{flex:1 1 260px;display:flex;flex-direction:column;gap:.75rem}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:.7rem 1rem}
+    .card h3{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:.5rem}
+    .row{display:flex;justify-content:space-between;align-items:baseline;font-size:.9rem;padding:2px 0}
+    .row .k{color:var(--muted)}
+    .row .v{font-weight:600;font-variant-numeric:tabular-nums}
+    .trig{width:100%;border-collapse:collapse;font-size:.85rem}
+    .trig th,.trig td{padding:4px 8px;border-bottom:1px solid var(--border);text-align:right}
+    .trig th:first-child,.trig td:first-child{text-align:left;max-width:90px}
+    .trig th{color:var(--muted);font-weight:500}
+    .trig tr:last-child td{border-bottom:none}
+    #ctrl{display:flex;flex-direction:column;gap:.4rem}
+    #ctrl label{font-size:.85rem;color:var(--muted)}
+    .slider-row{display:flex;align-items:center;gap:.6rem}
+    #slider-theta{flex:1;touch-action:manipulation;accent-color:var(--blue);cursor:pointer}
+    #theta-disp{font-weight:700;min-width:6.2rem;color:var(--blue);font-variant-numeric:tabular-nums}
+    .note{background:#eff6ff;border-color:#bfdbfe;font-size:.82rem;color:#1d4ed8;line-height:1.55}
+    /* SVG element classes */
+    .circ{fill:none;stroke:var(--blue);stroke-width:2}
+    .diam{stroke:var(--slate);stroke-width:1.5;stroke-dasharray:6 4}
+    .side-ab{stroke:var(--dark);stroke-width:2;stroke-linecap:round}
+    .side-bc{stroke:#16a34a;stroke-width:2;stroke-linecap:round}
+    .side-ac{stroke:#9333ea;stroke-width:2;stroke-linecap:round}
+    .ra-sq{fill:none;stroke:var(--slate);stroke-width:1.5;stroke-linejoin:miter}
+    .pt-ab{fill:var(--dark)}
+    .pt-c{fill:var(--red)}
+    .arc-a{fill:none;stroke:#9333ea;stroke-width:1.5;opacity:.8}
+    .arc-b{fill:none;stroke:#16a34a;stroke-width:1.5;opacity:.8}
+    .vlbl{font-weight:700}
+    .vsub{font-size:11px;fill:var(--muted)}
+    .slbl{font-size:13px;fill:var(--dark);font-weight:500}
+    .sp-dot{fill:var(--bg);stroke:var(--amber);stroke-width:2}
+    .sp-dot.snapped{fill:var(--amber)}
+    .sp-txt{font-size:10px;fill:var(--amber);font-weight:500}
+    @media(max-width:580px){main{padding:.5rem}#board{max-width:100%}}
+  </style>
+</head>
+<body>
+
+<header>
+  <h1 data-i18n="title">Thaletova kružnice</h1>
+  <div class="hbtns">
+    <button class="btn" id="btn-lang" aria-label="Přepnout jazyk / Switch language">EN</button>
+    <button class="btn" id="btn-download" data-i18n="download">Stáhnout</button>
+  </div>
+</header>
+
+<main>
+<!-- ── SVG STAGE ─────────────────────────────────────────────────────── -->
+<div id="stage">
+<svg id="board" viewBox="-260 -260 520 520" preserveAspectRatio="xMidYMid meet"
+     role="img" aria-label="Vizualizace Thaletovy kružnice">
+
+  <!--
+    Geometry layer uses math coordinates (Y-up).
+    transform="scale(1,-1)" maps math (x,y) → SVG screen (x,−y),
+    so positive-Y points upward on screen — natural for students.
+    TEXT must NOT go in this group (it would render upside-down).
+  -->
+  <g id="geo" transform="scale(1,-1)">
+    <!-- Thales circle + horizontal diameter -->
+    <g id="l-circle">
+      <circle class="circ" cx="0" cy="0" r="200"/>
+      <line class="diam" x1="-200" y1="0" x2="200" y2="0"/>
+    </g>
+
+    <!-- Special-angle markers — added in Chunk 3 -->
+    <g id="l-special"></g>
+
+    <!-- Triangle sides (AB is the diameter above) -->
+    <g id="l-tri">
+      <line class="side-ac" id="side-AC" x1="-200" y1="0" x2="0" y2="200"/>
+      <line class="side-bc" id="side-BC" x1="200"  y1="0" x2="0" y2="200"/>
+    </g>
+
+    <!-- Right-angle mark at C (θ=90° static values; recomputed in Chunk 2) -->
+    <g id="l-ra">
+      <polyline class="ra-sq" id="ra-sq"
+        points="-10.607,189.393 0,178.787 10.607,189.393"/>
+    </g>
+
+    <!-- Vertex dots -->
+    <g id="l-pts">
+      <circle class="pt-ab" id="pt-A" cx="-200" cy="0" r="5"/>
+      <circle class="pt-ab" id="pt-B" cx="200"  cy="0" r="5"/>
+      <circle class="pt-c"  id="pt-C" cx="0"    cy="200" r="6"/>
+    </g>
+
+    <!-- Angle arcs at A and B — added in Chunk 2 -->
+    <g id="l-arcs">
+      <path class="arc-a" id="arc-A" d=""/>
+      <path class="arc-b" id="arc-B" d=""/>
+    </g>
+  </g>
+
+  <!--
+    Text layer — no Y-flip. To position text at math point (mx, my),
+    use SVG attribute x=mx  y=−my  (negate Y only).
+  -->
+  <g id="txt" font-family="system-ui,sans-serif">
+    <!-- Vertex letters -->
+    <text class="vlbl" id="vlA" x="-222" y="7"    text-anchor="middle" font-size="17" fill="#1e293b">A</text>
+    <text class="vlbl" id="vlB" x="222"  y="7"    text-anchor="middle" font-size="17" fill="#1e293b">B</text>
+    <text class="vlbl" id="vlC" x="14"   y="-210" text-anchor="start"  font-size="17" fill="#ef4444">C</text>
+
+    <!-- Vertex coordinates -->
+    <text class="vsub" id="vcA" x="-222" y="23"   text-anchor="middle">(−200, 0)</text>
+    <text class="vsub" id="vcB" x="222"  y="23"   text-anchor="middle">(200, 0)</text>
+    <text class="vsub" id="vcC" x="14"   y="-196" text-anchor="start"  fill="#ef4444">(0, 200)</text>
+
+    <!--
+      Side-length labels — positioned at midpoint of each side + small offset.
+      Static positions for θ=90°; Chunk 2 updates x/y attributes.
+      b=|AC| midpoint math(−100,100) → SVG(−100,−100), offset: (−118,−108)
+      a=|BC| midpoint math( 100,100) → SVG( 100,−100), offset: ( 118,−108)
+      c=|AB| midpoint math(  0,  0) → SVG(  0,  0), label below: (0, 19)
+    -->
+    <text class="slbl" id="slB" x="-118" y="-108" text-anchor="middle" fill="#9333ea">b ≈ 283</text>
+    <text class="slbl" id="slA" x="118"  y="-108" text-anchor="middle" fill="#16a34a">a ≈ 283</text>
+    <text class="slbl" id="slC" x="0"    y="19"   text-anchor="middle" fill="#64748b">c = 400</text>
+
+    <!-- Angle-degree labels near A and B — Chunk 2 populates these -->
+    <text class="sp-txt" id="ang-lbl-A" x="0" y="0" text-anchor="middle" font-size="12" fill="#9333ea"></text>
+    <text class="sp-txt" id="ang-lbl-B" x="0" y="0" text-anchor="middle" font-size="12" fill="#16a34a"></text>
+  </g>
+</svg>
+</div>
+
+<!-- ── SIDE PANEL ──────────────────────────────────────────────────────── -->
+<div id="side-panel">
+
+  <!-- Slider -->
+  <div class="card" id="ctrl">
+    <label for="slider-theta" data-i18n="lblSlider">Poloha vrcholu C (úhel θ):</label>
+    <div class="slider-row">
+      <input type="range" id="slider-theta" min="1" max="179" step="0.1" value="90"
+             aria-label="Úhel θ — poloha vrcholu C na Thaletově kružnici">
+      <span id="theta-disp">θ = 90.0°</span>
+    </div>
+  </div>
+
+  <!-- Vertex coordinates -->
+  <div class="card">
+    <h3 data-i18n="cardCoords">Souřadnice vrcholů</h3>
+    <div class="row"><span class="k">A =</span><span class="v" id="vA">(−200, 0)</span></div>
+    <div class="row"><span class="k">B =</span><span class="v" id="vB">(200, 0)</span></div>
+    <div class="row">
+      <span class="k" style="color:var(--red)">C =</span>
+      <span class="v" id="vC" style="color:var(--red)">(0, 200)</span>
+    </div>
+  </div>
+
+  <!-- Side lengths -->
+  <div class="card">
+    <h3 data-i18n="cardSides">Délky stran</h3>
+    <div class="row">
+      <span class="k" data-i18n="sideA" style="color:#16a34a">a = |BC|</span>
+      <span class="v" id="va">≈ 282.84</span>
+    </div>
+    <div class="row">
+      <span class="k" data-i18n="sideB" style="color:#9333ea">b = |AC|</span>
+      <span class="v" id="vb">≈ 282.84</span>
+    </div>
+    <div class="row">
+      <span class="k" data-i18n="sideC">c = |AB|</span>
+      <span class="v" id="vc">= 400</span>
+    </div>
+  </div>
+
+  <!-- Trigonometric functions -->
+  <div class="card">
+    <h3 data-i18n="cardTrig">Goniometrické funkce</h3>
+    <table class="trig" aria-live="polite" aria-atomic="true">
+      <thead>
+        <tr>
+          <th data-i18n="thAngle">Úhel</th>
+          <th data-i18n="thSin">sin</th>
+          <th data-i18n="thCos">cos</th>
+          <th data-i18n="thTan">tan</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td id="lbl-rowA">α = 45.0°</td>
+          <td id="sinA">√2/2</td>
+          <td id="cosA">√2/2</td>
+          <td id="tanA">1</td>
+        </tr>
+        <tr>
+          <td id="lbl-rowB">β = 45.0°</td>
+          <td id="sinB">√2/2</td>
+          <td id="cosB">√2/2</td>
+          <td id="tanB">1</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Thales theorem note -->
+  <div class="card note">
+    <span data-i18n="thalesNote">Thaletova věta: úhel ∠ACB vepsaný do kružnice nad průměrem AB je vždy pravý (90°).</span>
+  </div>
+
+</div><!-- /side-panel -->
+</main>
+
+<script>
+// ── CONSTANTS ──────────────────────────────────────────────────────────────
+const R       = 200;   // circle radius (SVG units)
+const EPS_DEG = 0.5;   // snap tolerance in degrees
+
+// ── I18N DICTIONARY ────────────────────────────────────────────────────────
+const I18N = {
+  cs: {
+    title:      'Thaletova kružnice',
+    download:   'Stáhnout',
+    lblSlider:  'Poloha vrcholu C (úhel θ):',
+    cardCoords: 'Souřadnice vrcholů',
+    cardSides:  'Délky stran',
+    cardTrig:   'Goniometrické funkce',
+    sideA:      'a = |BC|',
+    sideB:      'b = |AC|',
+    sideC:      'c = |AB|',
+    thAngle:    'Úhel',
+    thSin:      'sin',
+    thCos:      'cos',
+    thTan:      'tan',
+    thalesNote: 'Thaletova věta: úhel ∠ACB vepsaný do kružnice nad průměrem AB je vždy pravý (90°).',
+    degenerate: '—',
+  },
+  en: {
+    title:      "Thales' Circle",
+    download:   'Download',
+    lblSlider:  'Position of vertex C (angle θ):',
+    cardCoords: 'Vertex Coordinates',
+    cardSides:  'Side Lengths',
+    cardTrig:   'Trigonometric Functions',
+    sideA:      'a = |BC|',
+    sideB:      'b = |AC|',
+    sideC:      'c = |AB|',
+    thAngle:    'Angle',
+    thSin:      'sin',
+    thCos:      'cos',
+    thTan:      'tan',
+    thalesNote: "Thales' theorem: the angle ∠ACB inscribed in a semicircle over diameter AB is always a right angle (90°).",
+    degenerate: '—',
+  }
+};
+
+let lang = 'cs';
+
+// Chunks 2–4 will add:
+//   math helpers, update loop, slider wiring,
+//   special-angle markers, snap, exact values,
+//   applyI18n(), language toggle, download button.
+</script>
+</body>
+</html>

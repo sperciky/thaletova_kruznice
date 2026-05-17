@@ -431,7 +431,120 @@ dom.slider.addEventListener('input', () => render(parseFloat(dom.slider.value)))
 // ── BOOT ───────────────────────────────────────────────────────────────────
 render(parseFloat(dom.slider.value));
 
-// Chunks 3–4: special-angle markers, snap, exact values, i18n, download.
+// ── SPECIAL ANGLES ─────────────────────────────────────────────────────────
+// By the inscribed-angle theorem α = θ/2.
+// α=30° → θ=60°;  α=45° → θ=90°;  α=60° → θ=120°.
+// Each marker also shows β = 90°−α at the same position.
+const SPECIAL = [
+  { theta: 60,  alpha: 30, beta: 60,
+    exactSinA:'1/2',    exactCosA:'√3/2', exactTanA:'√3/3',
+    exactSinB:'√3/2',   exactCosB:'1/2',  exactTanB:'√3' },
+  { theta: 90,  alpha: 45, beta: 45,
+    exactSinA:'√2/2',   exactCosA:'√2/2', exactTanA:'1',
+    exactSinB:'√2/2',   exactCosB:'√2/2', exactTanB:'1' },
+  { theta: 120, alpha: 60, beta: 30,
+    exactSinA:'√3/2',   exactCosA:'1/2',  exactTanA:'√3',
+    exactSinB:'1/2',    exactCosB:'√3/2', exactTanB:'√3/3' },
+];
+
+// Build marker elements once and cache references
+const specialEls = SPECIAL.map(sp => {
+  const thetaRad = toRad(sp.theta);
+  const mx = R * Math.cos(thetaRad);  // math coords
+  const my = R * Math.sin(thetaRad);
+
+  // Dot in geometry layer (math coords, will be Y-flipped by parent transform)
+  const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
+  dot.setAttribute('cx', mx);
+  dot.setAttribute('cy', my);
+  dot.setAttribute('r',  7);
+  dot.classList.add('sp-dot');
+  $('l-special').appendChild(dot);
+
+  // Label in text layer (negate Y)
+  // Offset outward from center by 28 units for readability
+  const offScale = 1.18;
+  const lx = mx * offScale;
+  const ly = -(my * offScale);  // negate for text layer
+  const anchor = mx >= 0 ? 'start' : 'end';
+
+  const lbl = document.createElementNS('http://www.w3.org/2000/svg','text');
+  lbl.setAttribute('x', lx + (mx >= 0 ? 4 : -4));
+  lbl.setAttribute('y', ly - 4);
+  lbl.setAttribute('text-anchor', anchor);
+  lbl.classList.add('sp-txt');
+  lbl.textContent = `α=${sp.alpha}°`;
+  $('txt').appendChild(lbl);
+
+  const lbl2 = document.createElementNS('http://www.w3.org/2000/svg','text');
+  lbl2.setAttribute('x', lx + (mx >= 0 ? 4 : -4));
+  lbl2.setAttribute('y', ly + 8);
+  lbl2.setAttribute('text-anchor', anchor);
+  lbl2.classList.add('sp-txt');
+  lbl2.textContent = `β=${sp.beta}°`;
+  $('txt').appendChild(lbl2);
+
+  return { sp, dot };
+});
+
+// Lookup: returns matching SPECIAL entry if |alpha − target| < EPS, else null
+function classifyAlpha(alphaDeg) {
+  for (const { sp } of specialEls) {
+    if (Math.abs(alphaDeg - sp.alpha) < EPS_DEG) return sp;
+  }
+  return null;
+}
+
+// Exact-value display: replace decimal with exact string when snapped
+function exactOrDecimal(exact, decimal) {
+  return exact !== undefined ? exact : fmt3(decimal);
+}
+
+// ── PATCH render() TO ADD SNAP + EXACT VALUES ──────────────────────────────
+// We wrap the tail of render() by monkey-patching; cleaner than re-writing
+// the whole function and avoids token budget issues.
+const _renderBase = render;
+render = function(thetaDeg) {
+  _renderBase(thetaDeg);
+
+  const alphaDeg = thetaDeg / 2;
+  const theta    = toRad(thetaDeg);
+  const Cx = R*Math.cos(theta), Cy = R*Math.sin(theta);
+  const Bx = R, By = 0;
+  const a = dist(Bx,By,Cx,Cy), b = dist(-R,0,Cx,Cy), c = 2*R;
+
+  const sp = classifyAlpha(alphaDeg);
+
+  // Toggle snap highlight on markers
+  for (const { sp: s, dot } of specialEls) {
+    dot.classList.toggle('snapped', sp !== null && s.theta === sp.theta);
+  }
+
+  if (sp) {
+    // Exact values in trig table
+    dom.sinA.textContent = sp.exactSinA;
+    dom.cosA.textContent = sp.exactCosA;
+    dom.tanA.textContent = sp.exactTanA;
+    dom.sinB.textContent = sp.exactSinB;
+    dom.cosB.textContent = sp.exactCosB;
+    dom.tanB.textContent = sp.exactTanB;
+
+    // Exact values in SVG side labels
+    // a = |BC| = c·sin(α) → use exact string based on sin
+    dom.slA.textContent = `a = ${sp.exactSinA}·c`;
+    dom.slB.textContent = `b = ${sp.exactCosA}·c`;
+  } else {
+    // Decimals (already set by base render; reset side labels with full value)
+    dom.slA.textContent = `a = ${a.toFixed(1)}`;
+    dom.slB.textContent = `b = ${b.toFixed(1)}`;
+  }
+};
+
+// Re-run with snap awareness
+render(parseFloat(dom.slider.value));
+
+// Chunk 4: i18n toggle, download button.
+
 </script>
 </body>
 </html>

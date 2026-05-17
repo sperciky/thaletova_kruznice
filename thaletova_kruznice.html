@@ -543,7 +543,42 @@ render = function(thetaDeg) {
 // Re-run with snap awareness
 render(parseFloat(dom.slider.value));
 
-// Chunk 4: i18n toggle, download button.
+// ── I18N ───────────────────────────────────────────────────────────────────
+function applyI18n() {
+  document.documentElement.lang = lang;
+  document.title = I18N[lang].title;
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    if (I18N[lang][key] !== undefined) el.textContent = I18N[lang][key];
+  });
+  $('btn-lang').textContent = lang === 'cs' ? 'EN' : 'CS';
+}
+
+$('btn-lang').addEventListener('click', () => {
+  lang = lang === 'cs' ? 'en' : 'cs';
+  applyI18n();
+  // Re-render so trig labels etc. stay consistent
+  render(parseFloat(dom.slider.value));
+});
+
+// ── DOWNLOAD ───────────────────────────────────────────────────────────────
+$('btn-download').addEventListener('click', () => {
+  const html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'thaletova_kruznice.html';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+});
+
+// ── BOOT ───────────────────────────────────────────────────────────────────
+applyI18n();
+render(parseFloat(dom.slider.value));
+
 
 </script>
 </body>

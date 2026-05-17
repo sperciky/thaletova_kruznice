@@ -272,10 +272,166 @@ const I18N = {
 
 let lang = 'cs';
 
-// Chunks 2–4 will add:
-//   math helpers, update loop, slider wiring,
-//   special-angle markers, snap, exact values,
-//   applyI18n(), language toggle, download button.
+// ── DOM CACHE ──────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const dom = {
+  slider:    $('slider-theta'),
+  thetaDisp: $('theta-disp'),
+  // SVG geometry (inside scale(1,-1) group — write math coords directly)
+  sideAC:  $('side-AC'),
+  sideBC:  $('side-BC'),
+  raSq:    $('ra-sq'),
+  ptC:     $('pt-C'),
+  arcA:    $('arc-A'),
+  arcB:    $('arc-B'),
+  // SVG text layer (negate Y when converting from math coords)
+  vlC:     $('vlC'),
+  vcC:     $('vcC'),
+  slA:     $('slA'),
+  slB:     $('slB'),
+  angA:    $('ang-lbl-A'),
+  angB:    $('ang-lbl-B'),
+  // Side-panel readouts
+  vA: $('vA'), vB: $('vB'), vC: $('vC'),
+  va: $('va'), vb: $('vb'), vc: $('vc'),
+  lblRowA: $('lbl-rowA'), lblRowB: $('lbl-rowB'),
+  sinA: $('sinA'), cosA: $('cosA'), tanA: $('tanA'),
+  sinB: $('sinB'), cosB: $('cosB'), tanB: $('tanB'),
+};
+
+// ── MATH HELPERS ───────────────────────────────────────────────────────────
+const toRad = d => d * Math.PI / 180;
+const toDeg = r => r * 180 / Math.PI;
+const dist  = (ax,ay,bx,by) => Math.hypot(bx-ax, by-ay);
+const fmt3  = v => v.toFixed(3);
+
+// Right-angle mark: 3 points forming corner at vertex V toward A and B
+function rightAnglePts(cx,cy, ax,ay, bx,by, s=15) {
+  const lenCA = dist(cx,cy,ax,ay), lenCB = dist(cx,cy,bx,by);
+  const uCAx = (ax-cx)/lenCA, uCAy = (ay-cy)/lenCA;
+  const uCBx = (bx-cx)/lenCB, uCBy = (by-cy)/lenCB;
+  const p1x = cx + s*uCAx, p1y = cy + s*uCAy;
+  const p2x = p1x + s*uCBx, p2y = p1y + s*uCBy;
+  const p3x = cx + s*uCBx, p3y = cy + s*uCBy;
+  return `${p1x},${p1y} ${p2x},${p2y} ${p3x},${p3y}`;
+}
+
+// SVG arc path from angle a1 to a2 (math degrees, CCW) at center (cx,cy) radius r
+function arcPath(cx,cy, r, a1deg, a2deg) {
+  const a1 = toRad(a1deg), a2 = toRad(a2deg);
+  // In geometry layer coords (math space, Y-up):
+  const x1 = cx + r*Math.cos(a1), y1 = cy + r*Math.sin(a1);
+  const x2 = cx + r*Math.cos(a2), y2 = cy + r*Math.sin(a2);
+  const large = (a2deg - a1deg > 180) ? 1 : 0;
+  return `M${x1},${y1} A${r},${r} 0 ${large},1 ${x2},${y2}`;
+}
+
+// Side-label position: midpoint of (ax,ay)-(bx,by) offset perp by d units
+function midOff(ax,ay, bx,by, d) {
+  const mx = (ax+bx)/2, my = (ay+by)/2;
+  const dx = bx-ax, dy = by-ay, len = Math.hypot(dx,dy);
+  // perpendicular (left of direction): (-dy, dx)
+  return { x: mx + d*(-dy)/len, y: my + d*dx/len };
+}
+
+// ── UPDATE LOOP ────────────────────────────────────────────────────────────
+function render(thetaDeg) {
+  const theta = toRad(thetaDeg);
+  // Vertex positions in math space (Y-up)
+  const Ax=-R, Ay=0, Bx=R, By=0;
+  const Cx = R*Math.cos(theta), Cy = R*Math.sin(theta);
+
+  // Angles (inscribed-angle theorem: α = θ/2)
+  const alphaDeg = thetaDeg / 2;
+  const betaDeg  = 90 - alphaDeg;
+
+  // Side lengths: a=|BC|, b=|AC|, c=|AB|=2R
+  const a = dist(Bx,By,Cx,Cy);
+  const b = dist(Ax,Ay,Cx,Cy);
+  const c = 2*R;
+
+  // Trig — use exact ratios (more stable than trig functions of the angle)
+  const sinA = a/c, cosA = b/c, tanA = (betaDeg > 89.9) ? Infinity : a/b;
+  const sinB = b/c, cosB = a/c, tanB = (alphaDeg > 89.9) ? Infinity : b/a;
+
+  // ── SVG geometry layer (math coords, Y-up) ──
+  dom.sideAC.setAttribute('x2', Cx); dom.sideAC.setAttribute('y2', Cy);
+  dom.sideBC.setAttribute('x2', Cx); dom.sideBC.setAttribute('y2', Cy);
+  dom.ptC.setAttribute('cx', Cx);    dom.ptC.setAttribute('cy', Cy);
+  dom.raSq.setAttribute('points', rightAnglePts(Cx,Cy, Ax,Ay, Bx,By));
+
+  // Angle arcs: arc at A from AB-direction (0°) to AC-direction
+  const acAngle = toDeg(Math.atan2(Cy-Ay, Cx-Ax));
+  dom.arcA.setAttribute('d', arcPath(Ax,Ay, 28, 0, acAngle));
+
+  // Arc at B from BC-direction to BA-direction (180°)
+  const bcAngle = toDeg(Math.atan2(Cy-By, Cx-Bx));
+  // B looks toward A (180°) and toward C (bcAngle); arc from bcAngle to 180
+  const arcBa1 = bcAngle, arcBa2 = 180;
+  dom.arcB.setAttribute('d', arcPath(Bx,By, 28, arcBa1, arcBa2));
+
+  // ── SVG text layer (negate Y for positions) ──
+  // C label + coord
+  const clx = Cx + (Cx >= 0 ? 14 : -14);
+  const cly = -(Cy + (Cy > 0 ? 12 : -24));
+  dom.vlC.setAttribute('x', clx);
+  dom.vlC.setAttribute('y', cly);
+  dom.vlC.setAttribute('text-anchor', Cx >= 0 ? 'start' : 'end');
+  dom.vcC.setAttribute('x', clx);
+  dom.vcC.setAttribute('y', cly + 14);
+  dom.vcC.setAttribute('text-anchor', Cx >= 0 ? 'start' : 'end');
+  dom.vcC.textContent = `(${Math.round(Cx)}, ${Math.round(Cy)})`;
+
+  // Side-label positions: offset perpendicular from midpoint (in math space, then negate Y for text)
+  const mB = midOff(Ax,Ay, Cx,Cy, -20); // side b=|AC|, offset left of AC direction
+  dom.slB.setAttribute('x', mB.x);
+  dom.slB.setAttribute('y', -mB.y);
+
+  const mA = midOff(Bx,By, Cx,Cy,  20); // side a=|BC|, offset right of BC direction
+  dom.slA.setAttribute('x', mA.x);
+  dom.slA.setAttribute('y', -mA.y);
+
+  // Side length text content (exact values filled in Chunk 3; decimals for now)
+  dom.slA.textContent = `a = ${a.toFixed(1)}`;
+  dom.slB.textContent = `b = ${b.toFixed(1)}`;
+
+  // Angle-degree labels near arc ends
+  const aLblAngle = toRad(acAngle / 2);
+  dom.angA.setAttribute('x', Ax + 44*Math.cos(aLblAngle));
+  dom.angA.setAttribute('y', -(Ay + 44*Math.sin(aLblAngle)));
+  dom.angA.textContent = alphaDeg.toFixed(1) + '°';
+
+  const bMid = (bcAngle + 180) / 2;
+  dom.angB.setAttribute('x', Bx + 44*Math.cos(toRad(bMid)));
+  dom.angB.setAttribute('y', -(By + 44*Math.sin(toRad(bMid))));
+  dom.angB.textContent = betaDeg.toFixed(1) + '°';
+
+  // ── Side-panel readouts ──
+  dom.thetaDisp.textContent = `θ = ${parseFloat(thetaDeg).toFixed(1)}°`;
+  dom.vC.textContent = `(${Math.round(Cx)}, ${Math.round(Cy)})`;
+
+  const fmtTrig = v => Number.isFinite(v) ? fmt3(v) : '∞';
+
+  dom.lblRowA.textContent = `α = ${alphaDeg.toFixed(1)}°`;
+  dom.lblRowB.textContent = `β = ${betaDeg.toFixed(1)}°`;
+  dom.sinA.textContent = fmt3(sinA);
+  dom.cosA.textContent = fmt3(cosA);
+  dom.tanA.textContent = fmtTrig(tanA);
+  dom.sinB.textContent = fmt3(sinB);
+  dom.cosB.textContent = fmt3(cosB);
+  dom.tanB.textContent = fmtTrig(tanB);
+
+  dom.va.textContent = `≈ ${a.toFixed(2)}`;
+  dom.vb.textContent = `≈ ${b.toFixed(2)}`;
+}
+
+// ── EVENT WIRING ───────────────────────────────────────────────────────────
+dom.slider.addEventListener('input', () => render(parseFloat(dom.slider.value)));
+
+// ── BOOT ───────────────────────────────────────────────────────────────────
+render(parseFloat(dom.slider.value));
+
+// Chunks 3–4: special-angle markers, snap, exact values, i18n, download.
 </script>
 </body>
 </html>
